@@ -1,7 +1,7 @@
 import { Navigate, Route, Routes } from 'react-router-dom';
 import AppLayout from './components/layout/AppLayout';
 import CandidatesPage from './pages/CandidatesPage';
-import DashboardPage from './pages/DashboardPage';
+import DashboardPage from './pages/dashboard/DashboardPage';
 import JobsPage from './pages/JobsPage';
 import ProtectedRoute from './components/routing/ProtectedRoute';
 import PipelinePage from './pages/PipelinePage';
