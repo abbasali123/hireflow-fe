@@ -8,7 +8,7 @@ import JobCreatePage from './pages/jobs/JobCreatePage';
 import JobDetailPage from './pages/jobs/JobDetailPage';
 import ProtectedRoute from './components/routing/ProtectedRoute';
 import PipelinePage from './pages/PipelinePage';
-import SettingsPage from './pages/SettingsPage';
+import SettingsPage from './pages/settings/SettingsPage';
 import LoginPage from './pages/auth/LoginPage';
 import RegisterPage from './pages/auth/RegisterPage';
 
