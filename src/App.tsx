@@ -1,6 +1,7 @@
 import { Navigate, Route, Routes } from 'react-router-dom';
 import AppLayout from './components/layout/AppLayout';
 import CandidatesPage from './pages/candidates/CandidatesPage';
+import CandidateDetailPage from './pages/candidates/CandidateDetailPage';
 import DashboardPage from './pages/dashboard/DashboardPage';
 import JobsListPage from './pages/jobs/JobsListPage';
 import JobCreatePage from './pages/jobs/JobCreatePage';
@@ -30,6 +31,7 @@ function App() {
         <Route path="jobs/new" element={<JobCreatePage />} />
         <Route path="jobs/:id" element={<JobDetailPage />} />
         <Route path="candidates" element={<CandidatesPage />} />
+        <Route path="candidates/:id" element={<CandidateDetailPage />} />
         <Route path="pipeline" element={<PipelinePage />} />
         <Route path="settings" element={<SettingsPage />} />
       </Route>
