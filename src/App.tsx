@@ -2,7 +2,9 @@ import { Navigate, Route, Routes } from 'react-router-dom';
 import AppLayout from './components/layout/AppLayout';
 import CandidatesPage from './pages/CandidatesPage';
 import DashboardPage from './pages/dashboard/DashboardPage';
-import JobsPage from './pages/JobsPage';
+import JobsListPage from './pages/jobs/JobsListPage';
+import JobCreatePage from './pages/jobs/JobCreatePage';
+import JobDetailPage from './pages/jobs/JobDetailPage';
 import ProtectedRoute from './components/routing/ProtectedRoute';
 import PipelinePage from './pages/PipelinePage';
 import SettingsPage from './pages/SettingsPage';
@@ -24,7 +26,9 @@ function App() {
       >
         <Route index element={<Navigate to="dashboard" replace />} />
         <Route path="dashboard" element={<DashboardPage />} />
-        <Route path="jobs" element={<JobsPage />} />
+        <Route path="jobs" element={<JobsListPage />} />
+        <Route path="jobs/new" element={<JobCreatePage />} />
+        <Route path="jobs/:id" element={<JobDetailPage />} />
         <Route path="candidates" element={<CandidatesPage />} />
         <Route path="pipeline" element={<PipelinePage />} />
         <Route path="settings" element={<SettingsPage />} />
