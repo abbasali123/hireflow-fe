@@ -3,17 +3,25 @@ import AppLayout from './components/layout/AppLayout';
 import CandidatesPage from './pages/CandidatesPage';
 import DashboardPage from './pages/DashboardPage';
 import JobsPage from './pages/JobsPage';
-import LoginPage from './pages/LoginPage';
+import ProtectedRoute from './components/routing/ProtectedRoute';
 import PipelinePage from './pages/PipelinePage';
-import RegisterPage from './pages/RegisterPage';
 import SettingsPage from './pages/SettingsPage';
+import LoginPage from './pages/auth/LoginPage';
+import RegisterPage from './pages/auth/RegisterPage';
 
 function App() {
   return (
     <Routes>
       <Route path="/login" element={<LoginPage />} />
       <Route path="/register" element={<RegisterPage />} />
-      <Route path="/app" element={<AppLayout />}>
+      <Route
+        path="/app"
+        element={
+          <ProtectedRoute>
+            <AppLayout />
+          </ProtectedRoute>
+        }
+      >
         <Route index element={<Navigate to="dashboard" replace />} />
         <Route path="dashboard" element={<DashboardPage />} />
         <Route path="jobs" element={<JobsPage />} />
