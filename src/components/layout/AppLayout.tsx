@@ -1,5 +1,6 @@
 import { PropsWithChildren } from 'react';
 import { NavLink, Outlet } from 'react-router-dom';
+import { useAuth } from '../../context/AuthContext';
 
 const navItems = [
   { to: '/app/dashboard', label: 'Dashboard' },
@@ -53,8 +54,8 @@ const SidebarLink = ({ to, label }: { to: string; label: string }) => (
   </NavLink>
 );
 
-const UserBadge = ({ name }: { name: string }) => (
-  <button className="flex items-center gap-3 rounded-full bg-white px-3 py-2 shadow-sm transition hover:shadow-md">
+const UserBadge = ({ name, onLogout }: { name: string; onLogout: () => void }) => (
+  <div className="flex items-center gap-3 rounded-full bg-white px-3 py-2 shadow-sm">
     <div className="flex h-10 w-10 items-center justify-center rounded-full bg-gradient-to-br from-accent to-indigo-500 text-white font-semibold">
       {name.charAt(0)}
     </div>
@@ -62,11 +63,19 @@ const UserBadge = ({ name }: { name: string }) => (
       <p className="text-sm font-semibold text-navy">{name}</p>
       <p className="text-xs text-navy/60">Talent Lead</p>
     </div>
-    <DropdownIcon />
-  </button>
+    <div className="flex items-center gap-2">
+      <button
+        onClick={onLogout}
+        className="rounded-full bg-accent/10 px-3 py-1 text-xs font-semibold text-accent transition hover:bg-accent/20"
+      >
+        Log out
+      </button>
+      <DropdownIcon />
+    </div>
+  </div>
 );
 
-const PageShell = ({ children }: PropsWithChildren) => (
+const PageShell = ({ children, userName, onLogout }: PropsWithChildren<{ userName?: string; onLogout?: () => void }>) => (
   <div className="min-h-screen bg-background font-body text-navy">
     <div className="mx-auto flex max-w-7xl gap-6 px-6 py-10">
       <aside className="w-64 shrink-0 rounded-2xl bg-white p-6 shadow-soft">
@@ -95,7 +104,7 @@ const PageShell = ({ children }: PropsWithChildren) => (
               className="w-full border-none bg-transparent text-sm text-navy/80 placeholder:text-navy/40 focus:outline-none"
             />
           </div>
-          <UserBadge name="Alex Morgan" />
+          {userName && onLogout && <UserBadge name={userName} onLogout={onLogout} />}
         </header>
         <div className="rounded-2xl bg-white p-6 shadow-soft">
           {children}
@@ -105,10 +114,14 @@ const PageShell = ({ children }: PropsWithChildren) => (
   </div>
 );
 
-const AppLayout = () => (
-  <PageShell>
-    <Outlet />
-  </PageShell>
-);
+const AppLayout = () => {
+  const { user, logout } = useAuth();
+
+  return (
+    <PageShell userName={user?.name ?? user?.email} onLogout={logout}>
+      <Outlet />
+    </PageShell>
+  );
+};
 
 export default AppLayout;
