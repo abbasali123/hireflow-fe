@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { DragDropContext, Draggable, Droppable, DropResult } from '@hello-pangea/dnd';
 import api from '../../api/client';
@@ -34,6 +34,124 @@ type JobDetail = {
   candidates?: Candidate[];
 };
 
+type GenerateJdModalProps = {
+  isOpen: boolean;
+  prompt: string;
+  generatedText: string;
+  isGenerating: boolean;
+  isSaving: boolean;
+  onClose: () => void;
+  onPromptChange: (value: string) => void;
+  onGeneratedTextChange: (value: string) => void;
+  onGenerate: () => void;
+  onUse: () => void;
+};
+
+const GenerateJdModal = ({
+  isOpen,
+  prompt,
+  generatedText,
+  isGenerating,
+  isSaving,
+  onClose,
+  onPromptChange,
+  onGeneratedTextChange,
+  onGenerate,
+  onUse,
+}: GenerateJdModalProps) => {
+  if (!isOpen) return null;
+
+  return (
+    <div className="fixed inset-0 z-30 flex items-center justify-center bg-navy/60 px-4">
+      <div className="w-full max-w-3xl rounded-2xl bg-white shadow-2xl ring-1 ring-black/5">
+        <div className="flex items-start justify-between border-b border-slate-100 px-6 py-4">
+          <div>
+            <h3 className="text-lg font-bold text-navy">Generate JD with AI</h3>
+            <p className="text-sm text-navy/60">
+              Powered by AI, you can still edit everything before saving.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-full p-2 text-sm font-semibold text-navy/60 transition hover:bg-slate-100 hover:text-navy"
+            aria-label="Close"
+          >
+            ✕
+          </button>
+        </div>
+
+        <div className="space-y-5 p-6">
+          <div className="space-y-2">
+            <label className="text-sm font-semibold text-navy" htmlFor="ai-prompt">
+              Describe what you need (role, seniority, key skills)
+            </label>
+            <textarea
+              id="ai-prompt"
+              className="min-h-[120px] w-full rounded-xl border border-navy/10 bg-white px-4 py-3 text-sm text-navy shadow-inner outline-none transition focus:border-indigo-300"
+              placeholder="e.g., Senior Frontend Engineer with React and Tailwind experience, remote-friendly"
+              value={prompt}
+              onChange={(event) => onPromptChange(event.target.value)}
+            />
+            <p className="text-xs text-navy/50">Provide as much detail as you like to tailor the JD.</p>
+          </div>
+
+          <div className="flex items-center justify-between gap-3">
+            <div className="text-sm text-navy/70">
+              {isGenerating ? 'Generating a job description with AI...' : 'Ready to generate a tailored job description.'}
+            </div>
+            <button
+              type="button"
+              onClick={onGenerate}
+              disabled={isGenerating || !prompt.trim()}
+              className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-indigo-500 to-sky-500 px-4 py-2 text-sm font-semibold text-white shadow-lg shadow-indigo-200 transition enabled:hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {isGenerating && (
+                <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/60 border-t-white" aria-hidden />
+              )}
+              Generate
+            </button>
+          </div>
+
+          <div className="space-y-2">
+            <label className="text-sm font-semibold text-navy" htmlFor="ai-result">
+              Generated job description
+            </label>
+            <textarea
+              id="ai-result"
+              className="min-h-[220px] w-full rounded-xl border border-navy/10 bg-slate-50 px-4 py-3 text-sm text-navy shadow-inner outline-none transition focus:border-indigo-300"
+              placeholder="Your generated job description will appear here."
+              value={generatedText}
+              onChange={(event) => onGeneratedTextChange(event.target.value)}
+            />
+          </div>
+
+          <div className="flex justify-end gap-3 border-t border-slate-100 pt-4">
+            <button
+              type="button"
+              onClick={onClose}
+              className="rounded-xl px-4 py-2 text-sm font-semibold text-navy/70 transition hover:bg-slate-50"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={onUse}
+              disabled={!generatedText.trim() || isSaving}
+              className="inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-4 py-2 text-sm font-semibold text-white shadow-lg shadow-indigo-200 transition enabled:hover:-translate-y-0.5 enabled:hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {isSaving && (
+                <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/60 border-t-white" aria-hidden />
+              )}
+              Use this
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 const JobDetailPage = () => {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -53,50 +171,54 @@ const JobDetailPage = () => {
   const [attachOpen, setAttachOpen] = useState(false);
   const [selectedCandidateId, setSelectedCandidateId] = useState('');
   const [aiModalOpen, setAiModalOpen] = useState(false);
-  const [aiLoading, setAiLoading] = useState(false);
-  const [aiContent, setAiContent] = useState('');
+  const [aiPrompt, setAiPrompt] = useState('');
+  const [aiGeneratedText, setAiGeneratedText] = useState('');
+  const [aiGenerating, setAiGenerating] = useState(false);
+  const [aiSaving, setAiSaving] = useState(false);
+
+  const fetchJob = useCallback(async () => {
+    if (!id) return;
+
+    setLoadingJob(true);
+    setError(null);
+
+    try {
+      const response = await api.get<JobDetail>(`/jobs/${id}`);
+      const jobData = response.data || null;
+      setJob(jobData);
+
+      const initialCandidates = (jobData?.candidates || []).map((candidate) => ({
+        ...candidate,
+        status: (candidate.status || 'SOURCED') as PipelineStatus,
+      }));
+
+      setBoard((previous) => {
+        const nextBoard: Record<PipelineStatus, Candidate[]> = {
+          ...previous,
+          SOURCED: [],
+          CONTACTED: [],
+          INTERVIEWING: [],
+          SHORTLISTED: [],
+          REJECTED: [],
+        };
+
+        initialCandidates.forEach((candidate) => {
+          const status = candidate.status || 'SOURCED';
+          nextBoard[status].push(candidate);
+        });
+
+        return nextBoard;
+      });
+    } catch (fetchError) {
+      console.error(fetchError);
+      setError('Unable to load job details right now. Please try again.');
+    } finally {
+      setLoadingJob(false);
+    }
+  }, [id]);
 
   useEffect(() => {
     if (!id) return;
-
-    const fetchJob = async () => {
-      setLoadingJob(true);
-      setError(null);
-
-      try {
-        const response = await api.get<JobDetail>(`/jobs/${id}`);
-        const jobData = response.data || null;
-        setJob(jobData);
-
-        const initialCandidates = (jobData?.candidates || []).map((candidate) => ({
-          ...candidate,
-          status: (candidate.status || 'SOURCED') as PipelineStatus,
-        }));
-
-        setBoard((previous) => {
-          const nextBoard: Record<PipelineStatus, Candidate[]> = {
-            ...previous,
-            SOURCED: [],
-            CONTACTED: [],
-            INTERVIEWING: [],
-            SHORTLISTED: [],
-            REJECTED: [],
-          };
-
-          initialCandidates.forEach((candidate) => {
-            const status = candidate.status || 'SOURCED';
-            nextBoard[status].push(candidate);
-          });
-
-          return nextBoard;
-        });
-      } catch (fetchError) {
-        console.error(fetchError);
-        setError('Unable to load job details right now. Please try again.');
-      } finally {
-        setLoadingJob(false);
-      }
-    };
 
     const fetchCandidates = async () => {
       setLoadingCandidates(true);
@@ -113,7 +235,7 @@ const JobDetailPage = () => {
 
     void fetchJob();
     void fetchCandidates();
-  }, [id]);
+  }, [fetchJob, id]);
 
   const availableCandidates = useMemo(
     () =>
@@ -184,19 +306,45 @@ const JobDetailPage = () => {
   };
 
   const handleGenerateAiJd = async () => {
-    setAiModalOpen(true);
-    setAiLoading(true);
-    setAiContent('');
+    setAiGenerating(true);
 
     try {
-      const payload = job ? { jobId: job.id, title: job.title, description: job.description } : { jobId: id };
-      const response = await api.post<{ content: string }>('/ai/generate-jd', payload);
-      setAiContent((response.data as { content?: string })?.content || 'AI generated job description will appear here.');
+      const response = await api.post<{ text: string }>('/ai/generate-jd', { prompt: aiPrompt });
+      const generated = (response.data as { text?: string })?.text || '';
+      setAiGeneratedText(generated);
     } catch (aiError) {
       console.error(aiError);
-      setAiContent('We could not generate a JD right now. Please try again later.');
+      setAiGeneratedText('We could not generate a JD right now. Please try again later.');
     } finally {
-      setAiLoading(false);
+      setAiGenerating(false);
+    }
+  };
+
+  const handleOpenAiModal = () => {
+    setAiModalOpen(true);
+    setAiGeneratedText(job?.description || '');
+    setAiPrompt(job?.title ? `Job: ${job.title}. Location: ${job.location}. Key skills: ${job.requiredSkills?.join(', ') || ''}.` : '');
+  };
+
+  const handleCloseAiModal = () => {
+    setAiModalOpen(false);
+    setAiGenerating(false);
+    setAiSaving(false);
+  };
+
+  const handleUseGeneratedJd = async () => {
+    if (!id || !aiGeneratedText.trim()) return;
+
+    setAiSaving(true);
+
+    try {
+      await api.put(`/jobs/${id}`, { description: aiGeneratedText });
+      await fetchJob();
+      setAiModalOpen(false);
+    } catch (saveError) {
+      console.error(saveError);
+    } finally {
+      setAiSaving(false);
     }
   };
 
@@ -233,7 +381,7 @@ const JobDetailPage = () => {
         <div className="flex gap-2">
           <button
             type="button"
-            onClick={handleGenerateAiJd}
+            onClick={handleOpenAiModal}
             className="rounded-xl bg-gradient-to-r from-indigo-500 to-sky-500 px-4 py-2 text-sm font-semibold text-white shadow-lg shadow-indigo-200 transition hover:-translate-y-0.5"
           >
             Generate JD with AI
@@ -449,28 +597,18 @@ const JobDetailPage = () => {
         </div>
       )}
 
-      {aiModalOpen && (
-        <div className="fixed inset-0 z-30 flex items-center justify-center bg-black/40 px-4">
-          <div className="w-full max-w-xl rounded-2xl bg-white p-6 shadow-2xl">
-            <div className="flex items-center justify-between">
-              <div>
-                <h3 className="text-lg font-bold text-navy">AI Generated JD</h3>
-                <p className="text-sm text-navy/60">Preview of the generated job description.</p>
-              </div>
-              <button
-                type="button"
-                onClick={() => setAiModalOpen(false)}
-                className="text-sm font-semibold text-navy/60 transition hover:text-navy"
-              >
-                ✕
-              </button>
-            </div>
-            <div className="mt-4 min-h-[140px] rounded-xl bg-slate-50 p-4 text-sm text-navy/80 ring-1 ring-navy/5">
-              {aiLoading ? 'Generating with AI...' : aiContent || 'No content available yet.'}
-            </div>
-          </div>
-        </div>
-      )}
+      <GenerateJdModal
+        isOpen={aiModalOpen}
+        prompt={aiPrompt}
+        generatedText={aiGeneratedText}
+        isGenerating={aiGenerating}
+        isSaving={aiSaving}
+        onClose={handleCloseAiModal}
+        onPromptChange={setAiPrompt}
+        onGeneratedTextChange={setAiGeneratedText}
+        onGenerate={handleGenerateAiJd}
+        onUse={handleUseGeneratedJd}
+      />
     </div>
   );
 };
