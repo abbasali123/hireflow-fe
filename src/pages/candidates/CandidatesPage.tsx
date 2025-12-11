@@ -1,6 +1,6 @@
-import axios, { AxiosError } from 'axios';
 import { type ChangeEvent, type DragEvent, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import api, { type ApiError } from '../../api/client';
 
 export type Candidate = {
   id: string;
@@ -20,10 +20,6 @@ const skillColors = [
   'bg-rose-50 text-rose-700 ring-1 ring-rose-100',
   'bg-purple-50 text-purple-700 ring-1 ring-purple-100',
 ];
-
-const apiClient = axios.create({
-  baseURL: import.meta.env.VITE_API_URL || '',
-});
 
 const formatDate = (dateString: string) => {
   const date = new Date(dateString);
@@ -56,7 +52,7 @@ const CandidatesPage = () => {
     setError(null);
 
     try {
-      const response = await apiClient.get<Candidate[]>('/candidates');
+      const response = await api.get<Candidate[]>('/candidates');
       setCandidates(response.data || []);
     } catch (fetchError) {
       console.error(fetchError);
@@ -116,11 +112,11 @@ const CandidatesPage = () => {
     setUploadProgress(0);
 
     try {
-      await apiClient.post<Candidate>('/candidates/upload', formData, {
+      await api.post<Candidate>('/candidates/upload', formData, {
         headers: {
           'Content-Type': 'multipart/form-data',
         },
-        onUploadProgress: (progressEvent) => {
+        onUploadProgress: (progressEvent: ProgressEvent) => {
           if (progressEvent.total) {
             const percentCompleted = Math.round((progressEvent.loaded * 100) / progressEvent.total);
             setUploadProgress(percentCompleted);
@@ -136,7 +132,7 @@ const CandidatesPage = () => {
       void fetchCandidates();
     } catch (uploadErr) {
       console.error(uploadErr);
-      const axiosError = uploadErr as AxiosError<{ message?: string }>;
+      const axiosError = uploadErr as ApiError<{ message?: string }>;
       const message = axiosError.response?.data?.message || axiosError.message || 'Upload failed. Please try again.';
       setUploadError(message);
     } finally {

@@ -1,6 +1,14 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { DragDropContext, Draggable, Droppable, DropResult } from '@hello-pangea/dnd';
+import {
+  DragDropContext,
+  Draggable,
+  Droppable,
+  DropResult,
+  type DraggableProvided,
+  type DraggableStateSnapshot,
+  type DroppableProvided,
+} from '@hello-pangea/dnd';
 import api from '../../api/client';
 
 const pipelineColumns = [
@@ -488,7 +496,7 @@ const JobDetailPage = () => {
               <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
                 {pipelineColumns.map((column) => (
                   <Droppable droppableId={column.key} key={column.key}>
-                    {(provided) => (
+                    {(provided: DroppableProvided) => (
                       <div
                         ref={provided.innerRef}
                         {...provided.droppableProps}
@@ -514,7 +522,7 @@ const JobDetailPage = () => {
                           )}
                           {board[column.key].map((candidate, index) => (
                             <Draggable draggableId={`${candidate.id}-${column.key}`} index={index} key={`${candidate.id}-${column.key}`}>
-                              {(draggableProvided, snapshot) => (
+                              {(draggableProvided: DraggableProvided, snapshot: DraggableStateSnapshot) => (
                                 <div
                                   ref={draggableProvided.innerRef}
                                   {...draggableProvided.draggableProps}

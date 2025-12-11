@@ -1,56 +1,81 @@
+import axios, { type AxiosError, type AxiosRequestConfig, type AxiosResponse } from 'axios';
+
 const baseUrl = import.meta.env.VITE_API_URL || '';
 
 type HttpMethod = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
 
-type ApiResponse<T> = {
+export type ApiResponse<T> = {
   data: T;
   status: number;
 };
+
+export type ApiError<T = unknown> = AxiosError<T>;
 
 const handleUnauthorized = () => {
   localStorage.removeItem('hf_token');
   window.location.href = '/login';
 };
 
-const request = async <T>(method: HttpMethod, path: string, body?: unknown): Promise<ApiResponse<T>> => {
+const apiClient = axios.create({
+  baseURL: baseUrl,
+});
+
+apiClient.interceptors.request.use((config: AxiosRequestConfig) => {
   const token = localStorage.getItem('hf_token');
-  const headers: Record<string, string> = {
-    'Content-Type': 'application/json',
-  };
 
   if (token) {
-    headers.Authorization = `Bearer ${token}`;
+    config.headers = {
+      ...(config.headers || {}),
+      Authorization: `Bearer ${token}`,
+    };
   }
 
-  const response = await fetch(`${baseUrl}${path}`, {
+  if (!(config.data instanceof FormData)) {
+    config.headers = {
+      'Content-Type': 'application/json',
+      ...(config.headers || {}),
+    };
+  }
+
+  return config;
+});
+
+apiClient.interceptors.response.use(
+  (response: AxiosResponse) => response,
+  (error: AxiosError) => {
+    if (error.response?.status === 401) {
+      handleUnauthorized();
+    }
+
+    return Promise.reject(error);
+  },
+);
+
+const request = async <T>(
+  method: HttpMethod,
+  path: string,
+  data?: unknown,
+  config?: AxiosRequestConfig,
+): Promise<ApiResponse<T>> => {
+  const response = (await apiClient.request({
+    url: path,
     method,
-    headers,
-    body: body ? JSON.stringify(body) : undefined,
-  });
-
-  if (response.status === 401) {
-    handleUnauthorized();
-    throw new Error('Unauthorized');
-  }
-
-  const responseData = (await response.json().catch(() => null)) as T;
-
-  if (!response.ok) {
-    throw new Error(`Request failed with status ${response.status}`);
-  }
+    data,
+    ...config,
+  })) as AxiosResponse<T>;
 
   return {
-    data: responseData,
+    data: response.data,
     status: response.status,
   };
 };
 
 const api = {
-  get: <T>(path: string) => request<T>('GET', path),
-  post: <T>(path: string, body?: unknown) => request<T>('POST', path, body),
-  put: <T>(path: string, body?: unknown) => request<T>('PUT', path, body),
-  patch: <T>(path: string, body?: unknown) => request<T>('PATCH', path, body),
-  delete: <T>(path: string) => request<T>('DELETE', path),
+  get: <T>(path: string, config?: AxiosRequestConfig) => request<T>('GET', path, undefined, config),
+  post: <T>(path: string, data?: unknown, config?: AxiosRequestConfig) => request<T>('POST', path, data, config),
+  put: <T>(path: string, data?: unknown, config?: AxiosRequestConfig) => request<T>('PUT', path, data, config),
+  patch: <T>(path: string, data?: unknown, config?: AxiosRequestConfig) => request<T>('PATCH', path, data, config),
+  delete: <T>(path: string, config?: AxiosRequestConfig) => request<T>('DELETE', path, undefined, config),
 };
 
 export default api;
