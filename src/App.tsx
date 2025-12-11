@@ -1,6 +1,6 @@
 import { Navigate, Route, Routes } from 'react-router-dom';
 import AppLayout from './components/layout/AppLayout';
-import CandidatesPage from './pages/CandidatesPage';
+import CandidatesPage from './pages/candidates/CandidatesPage';
 import DashboardPage from './pages/dashboard/DashboardPage';
 import JobsListPage from './pages/jobs/JobsListPage';
 import JobCreatePage from './pages/jobs/JobCreatePage';
