@@ -23,22 +23,51 @@ type PipelineStatus = (typeof pipelineColumns)[number]['key'];
 
 type Candidate = {
   id: string;
-  name: string;
-  title?: string;
+  userId: string;
+  fullName: string;
+  email: string;
+  phone?: string;
+  location?: string;
+  resumeUrl?: string;
+  summary?: string | null;
+  rawText?: string | null;
   skills?: string[];
-  matchScore?: number;
-  status?: PipelineStatus;
+  experience?: { title?: string; years?: number; company?: string }[];
+  education?: { degree?: string; school?: string; graduationYear?: number }[];
+  createdAt?: string;
+};
+
+type JobCandidate = {
+  id: string;
+  candidateId: string;
+  jobId: string;
+  status: PipelineStatus;
+  matchScore?: number | null;
+  notes?: string | null;
+  candidate: Candidate;
+};
+
+type PipelineCandidate = Candidate & {
+  jobCandidateId: string;
+  status: PipelineStatus;
+  matchScore?: number | null;
+  notes?: string | null;
 };
 
 type CandidateProfile = {
   id: string;
-  fullName?: string;
-  name?: string;
-  email?: string;
+  userId: string;
+  fullName: string;
+  email: string;
+  phone?: string;
   location?: string;
+  resumeUrl?: string;
+  summary?: string | null;
+  rawText?: string | null;
   skills?: string[];
-  summary?: string;
-  rawText?: string;
+  experience?: { title?: string; years?: number; company?: string }[];
+  education?: { degree?: string; school?: string; graduationYear?: number }[];
+  createdAt?: string;
 };
 
 type AiScore = {
@@ -182,7 +211,7 @@ const JobDetailPage = () => {
 
   const [job, setJob] = useState<JobDetail | null>(null);
   const [allCandidates, setAllCandidates] = useState<Candidate[]>([]);
-  const [board, setBoard] = useState<Record<PipelineStatus, Candidate[]>>({
+  const [board, setBoard] = useState<Record<PipelineStatus, PipelineCandidate[]>>({
     SOURCED: [],
     CONTACTED: [],
     INTERVIEWING: [],
@@ -216,34 +245,40 @@ const JobDetailPage = () => {
       const response = await api.get<JobDetail>(`/jobs/${id}`);
       const jobData = response.data || null;
       setJob(jobData);
-
-      const initialCandidates = (jobData?.candidates || []).map((candidate) => ({
-        ...candidate,
-        status: (candidate.status || 'SOURCED') as PipelineStatus,
-      }));
-
-      setBoard((previous) => {
-        const nextBoard: Record<PipelineStatus, Candidate[]> = {
-          ...previous,
-          SOURCED: [],
-          CONTACTED: [],
-          INTERVIEWING: [],
-          SHORTLISTED: [],
-          REJECTED: [],
-        };
-
-        initialCandidates.forEach((candidate) => {
-          const status = candidate.status || 'SOURCED';
-          nextBoard[status].push(candidate);
-        });
-
-        return nextBoard;
-      });
     } catch (fetchError) {
       console.error(fetchError);
       setError('Unable to load job details right now. Please try again.');
     } finally {
       setLoadingJob(false);
+    }
+  }, [id]);
+
+  const fetchJobCandidates = useCallback(async () => {
+    if (!id) return;
+
+    setLoadingCandidates(true);
+
+    try {
+      const response = await api.get<JobCandidate[]>(`/jobs/${id}/candidates`);
+      const linkedCandidates = (response.data || []).map((jobCandidate) => ({
+        ...jobCandidate.candidate,
+        jobCandidateId: jobCandidate.id,
+        status: (jobCandidate.status || 'SOURCED') as PipelineStatus,
+        matchScore: jobCandidate.matchScore,
+        notes: jobCandidate.notes,
+      }));
+
+      setBoard({
+        SOURCED: linkedCandidates.filter((candidate) => candidate.status === 'SOURCED'),
+        CONTACTED: linkedCandidates.filter((candidate) => candidate.status === 'CONTACTED'),
+        INTERVIEWING: linkedCandidates.filter((candidate) => candidate.status === 'INTERVIEWING'),
+        SHORTLISTED: linkedCandidates.filter((candidate) => candidate.status === 'SHORTLISTED'),
+        REJECTED: linkedCandidates.filter((candidate) => candidate.status === 'REJECTED'),
+      });
+    } catch (fetchError) {
+      console.error(fetchError);
+    } finally {
+      setLoadingCandidates(false);
     }
   }, [id]);
 
@@ -265,7 +300,8 @@ const JobDetailPage = () => {
 
     void fetchJob();
     void fetchCandidates();
-  }, [fetchJob, id]);
+    void fetchJobCandidates();
+  }, [fetchJob, fetchJobCandidates, id]);
 
   const availableCandidates = useMemo(
     () =>
@@ -321,13 +357,7 @@ const JobDetailPage = () => {
 
     try {
       await api.post(`/jobs/${id}/candidates/${selectedCandidateId}/link`);
-      const newCandidate = allCandidates.find((candidate) => candidate.id === selectedCandidateId);
-      if (newCandidate) {
-        setBoard((previous) => ({
-          ...previous,
-          SOURCED: [...previous.SOURCED, { ...newCandidate, status: 'SOURCED' }],
-        }));
-      }
+      await fetchJobCandidates();
       setSelectedCandidateId('');
       setAttachOpen(false);
     } catch (linkError) {
@@ -379,7 +409,7 @@ const JobDetailPage = () => {
 
       if (nextScore) {
         setBoard((previous) => {
-          const updated: Record<PipelineStatus, Candidate[]> = { ...previous } as Record<PipelineStatus, Candidate[]>;
+          const updated: Record<PipelineStatus, PipelineCandidate[]> = { ...previous };
           (Object.keys(updated) as PipelineStatus[]).forEach((statusKey) => {
             updated[statusKey] = updated[statusKey].map((candidate) =>
               candidate.id === activeCandidate.id ? { ...candidate, matchScore: nextScore.score } : candidate,
@@ -439,7 +469,7 @@ const JobDetailPage = () => {
     }
   };
 
-  const renderCandidateCard = (candidate: Candidate, accent: string) => (
+  const renderCandidateCard = (candidate: PipelineCandidate, accent: string) => (
     <div
       key={candidate.id}
       onClick={() => handleCandidateClick(candidate.id)}
@@ -448,9 +478,9 @@ const JobDetailPage = () => {
       <span className={`absolute left-0 top-0 h-full w-1 ${accent}`} aria-hidden />
       <div className="flex items-start justify-between gap-3">
         <div>
-          <p className="text-sm font-semibold text-navy">{candidate.name}</p>
+          <p className="text-sm font-semibold text-navy">{candidate.fullName}</p>
           <p className="text-xs text-navy/60">
-            {candidate.title || candidate.skills?.slice(0, 3).join(', ') || 'Skills unavailable'}
+            {candidate.experience?.[0]?.title || candidate.skills?.slice(0, 3).join(', ') || candidate.location || 'Details unavailable'}
           </p>
         </div>
         {typeof candidate.matchScore === 'number' && (
@@ -662,7 +692,7 @@ const JobDetailPage = () => {
                   <option value="">Select candidate</option>
                   {availableCandidates.map((candidate) => (
                     <option key={candidate.id} value={candidate.id}>
-                      {candidate.name} {candidate.title ? `• ${candidate.title}` : ''}
+                      {candidate.fullName} {candidate.experience?.[0]?.title ? `• ${candidate.experience[0].title}` : ''}
                     </option>
                   ))}
                 </select>
@@ -722,7 +752,7 @@ const JobDetailPage = () => {
                 ) : activeCandidate ? (
                   <div className="space-y-3">
                     <div>
-                      <h4 className="text-xl font-bold text-navy">{activeCandidate.fullName || activeCandidate.name}</h4>
+                      <h4 className="text-xl font-bold text-navy">{activeCandidate.fullName}</h4>
                       <p className="text-sm text-navy/60">{activeCandidate.location || 'Location unavailable'}</p>
                     </div>
                     {activeCandidate.skills && activeCandidate.skills.length > 0 && (
