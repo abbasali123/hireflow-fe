@@ -14,6 +14,10 @@ const JobCreatePage = () => {
   const [requiredSkills, setRequiredSkills] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [aiModalOpen, setAiModalOpen] = useState(false);
+  const [aiPrompt, setAiPrompt] = useState('');
+  const [aiGeneratedText, setAiGeneratedText] = useState('');
+  const [aiGenerating, setAiGenerating] = useState(false);
 
   const handleSubmit = async (event: FormEvent) => {
     event.preventDefault();
@@ -42,6 +46,28 @@ const JobCreatePage = () => {
     } finally {
       setSubmitting(false);
     }
+  };
+
+  const handleGenerateJd = async () => {
+    if (!aiPrompt.trim()) return;
+    setAiGenerating(true);
+    setError(null);
+
+    try {
+      const response = await api.post<{ text: string }>('/ai/generate-jd', { prompt: aiPrompt });
+      setAiGeneratedText(response.data?.text || '');
+    } catch (aiError) {
+      console.error(aiError);
+      setAiGeneratedText('Unable to generate a description right now. Please try again.');
+    } finally {
+      setAiGenerating(false);
+    }
+  };
+
+  const handleUseGeneratedJd = () => {
+    if (!aiGeneratedText.trim()) return;
+    setDescription(aiGeneratedText);
+    setAiModalOpen(false);
   };
 
   return (
@@ -136,6 +162,24 @@ const JobCreatePage = () => {
 
         <div className="space-y-2">
           <label className="text-sm font-semibold text-navy">Description</label>
+          <div className="flex flex-wrap items-center gap-2 text-xs text-navy/60">
+            <span>Need inspiration?</span>
+            <button
+              type="button"
+              onClick={() => {
+                setAiPrompt(
+                  [title && `Role: ${title}`, company && `Company: ${company}`, location && `Location: ${location}`]
+                    .filter(Boolean)
+                    .join('. '),
+                );
+                setAiGeneratedText(description);
+                setAiModalOpen(true);
+              }}
+              className="inline-flex items-center gap-2 rounded-full bg-indigo-50 px-3 py-1 font-semibold text-indigo-600 ring-1 ring-indigo/10 transition hover:-translate-y-0.5 hover:bg-indigo-100"
+            >
+              ✨ Generate JD with AI
+            </button>
+          </div>
           <textarea
             value={description}
             onChange={(event) => setDescription(event.target.value)}
@@ -178,6 +222,83 @@ const JobCreatePage = () => {
           </button>
         </div>
       </form>
+
+      {aiModalOpen && (
+        <div className="fixed inset-0 z-30 flex items-center justify-center bg-navy/60 px-4">
+          <div className="w-full max-w-3xl rounded-2xl bg-white shadow-2xl ring-1 ring-black/5">
+            <div className="flex items-start justify-between border-b border-slate-100 px-6 py-4">
+              <div>
+                <h3 className="text-lg font-bold text-navy">Generate JD with AI</h3>
+                <p className="text-sm text-navy/60">Share a short brief and let AI draft the description.</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setAiModalOpen(false)}
+                className="rounded-full p-2 text-sm font-semibold text-navy/60 transition hover:bg-slate-100 hover:text-navy"
+                aria-label="Close"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="space-y-5 p-6">
+              <div className="space-y-2">
+                <label className="text-sm font-semibold text-navy" htmlFor="ai-prompt">
+                  Describe the role (location, seniority, key skills)
+                </label>
+                <textarea
+                  id="ai-prompt"
+                  className="min-h-[120px] w-full rounded-xl border border-navy/10 bg-white px-4 py-3 text-sm text-navy shadow-inner outline-none transition focus:border-indigo-300"
+                  placeholder="Senior React dev for SaaS, 5+ years, remote, US/EU timezone."
+                  value={aiPrompt}
+                  onChange={(event) => setAiPrompt(event.target.value)}
+                />
+                <p className="text-xs text-navy/50">The richer the prompt, the more tailored the JD.</p>
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-sm font-semibold text-navy" htmlFor="ai-output">
+                  AI suggestion
+                </label>
+                <textarea
+                  id="ai-output"
+                  className="min-h-[180px] w-full rounded-xl border border-navy/10 bg-white px-4 py-3 text-sm text-navy shadow-inner outline-none transition focus:border-indigo-300"
+                  placeholder="Generated job description will appear here."
+                  value={aiGeneratedText}
+                  onChange={(event) => setAiGeneratedText(event.target.value)}
+                />
+              </div>
+
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div className="text-sm text-navy/70">
+                  {aiGenerating ? 'Generating a description...' : 'Use AI to save time; you can still edit anything.'}
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={handleGenerateJd}
+                    disabled={aiGenerating || !aiPrompt.trim()}
+                    className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-indigo-500 to-sky-500 px-4 py-2 text-sm font-semibold text-white shadow-lg shadow-indigo-200 transition enabled:hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    {aiGenerating && (
+                      <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/60 border-t-white" aria-hidden />
+                    )}
+                    Generate
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleUseGeneratedJd}
+                    disabled={!aiGeneratedText.trim()}
+                    className="rounded-xl bg-indigo-600 px-4 py-2 text-sm font-semibold text-white shadow-lg shadow-indigo-200 transition enabled:hover:-translate-y-0.5 enabled:hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    Use this
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

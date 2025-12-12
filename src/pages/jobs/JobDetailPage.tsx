@@ -30,6 +30,22 @@ type Candidate = {
   status?: PipelineStatus;
 };
 
+type CandidateProfile = {
+  id: string;
+  fullName?: string;
+  name?: string;
+  email?: string;
+  location?: string;
+  skills?: string[];
+  summary?: string;
+  rawText?: string;
+};
+
+type AiScore = {
+  score: number;
+  explanation?: string;
+};
+
 type JobDetail = {
   id: string;
   title: string;
@@ -183,6 +199,12 @@ const JobDetailPage = () => {
   const [aiGeneratedText, setAiGeneratedText] = useState('');
   const [aiGenerating, setAiGenerating] = useState(false);
   const [aiSaving, setAiSaving] = useState(false);
+  const [candidateModalOpen, setCandidateModalOpen] = useState(false);
+  const [activeCandidate, setActiveCandidate] = useState<CandidateProfile | null>(null);
+  const [loadingCandidateDetail, setLoadingCandidateDetail] = useState(false);
+  const [candidateDetailError, setCandidateDetailError] = useState<string | null>(null);
+  const [scoring, setScoring] = useState(false);
+  const [candidateScore, setCandidateScore] = useState<AiScore | null>(null);
 
   const fetchJob = useCallback(async () => {
     if (!id) return;
@@ -313,6 +335,67 @@ const JobDetailPage = () => {
     }
   };
 
+  const loadCandidateDetail = async (candidateId: string) => {
+    setLoadingCandidateDetail(true);
+    setCandidateDetailError(null);
+    setCandidateScore(null);
+
+    try {
+      const response = await api.get<CandidateProfile>(`/candidates/${candidateId}`);
+      setActiveCandidate(response.data || null);
+    } catch (fetchError) {
+      console.error(fetchError);
+      setCandidateDetailError('Unable to load candidate details right now.');
+    } finally {
+      setLoadingCandidateDetail(false);
+    }
+  };
+
+  const handleCandidateClick = (candidateId: string) => {
+    setCandidateModalOpen(true);
+    setActiveCandidate(null);
+    setCandidateScore(null);
+    setCandidateDetailError(null);
+    void loadCandidateDetail(candidateId);
+  };
+
+  const handleScoreCandidate = async () => {
+    if (!job?.description || !activeCandidate?.rawText) {
+      setCandidateDetailError('Job description or candidate resume text missing.');
+      return;
+    }
+
+    setScoring(true);
+    setCandidateDetailError(null);
+    setCandidateScore(null);
+
+    try {
+      const response = await api.post<AiScore>('/ai/score-candidate', {
+        jobDescription: job.description,
+        candidateText: activeCandidate.rawText,
+      });
+      const nextScore = response.data || null;
+      setCandidateScore(nextScore);
+
+      if (nextScore) {
+        setBoard((previous) => {
+          const updated: Record<PipelineStatus, Candidate[]> = { ...previous } as Record<PipelineStatus, Candidate[]>;
+          (Object.keys(updated) as PipelineStatus[]).forEach((statusKey) => {
+            updated[statusKey] = updated[statusKey].map((candidate) =>
+              candidate.id === activeCandidate.id ? { ...candidate, matchScore: nextScore.score } : candidate,
+            );
+          });
+          return updated;
+        });
+      }
+    } catch (scoreError) {
+      console.error(scoreError);
+      setCandidateDetailError('Could not score this candidate right now.');
+    } finally {
+      setScoring(false);
+    }
+  };
+
   const handleGenerateAiJd = async () => {
     setAiGenerating(true);
 
@@ -359,7 +442,8 @@ const JobDetailPage = () => {
   const renderCandidateCard = (candidate: Candidate, accent: string) => (
     <div
       key={candidate.id}
-      className="group relative overflow-hidden rounded-xl bg-white p-4 shadow-sm ring-1 ring-navy/5 transition hover:-translate-y-0.5 hover:shadow-md"
+      onClick={() => handleCandidateClick(candidate.id)}
+      className="group relative cursor-pointer overflow-hidden rounded-xl bg-white p-4 shadow-sm ring-1 ring-navy/5 transition hover:-translate-y-0.5 hover:shadow-md"
     >
       <span className={`absolute left-0 top-0 h-full w-1 ${accent}`} aria-hidden />
       <div className="flex items-start justify-between gap-3">
@@ -600,6 +684,114 @@ const JobDetailPage = () => {
               >
                 Attach
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {candidateModalOpen && (
+        <div className="fixed inset-0 z-30 flex items-center justify-center bg-black/40 px-4">
+          <div className="w-full max-w-3xl rounded-2xl bg-white shadow-2xl ring-1 ring-black/5">
+            <div className="flex items-start justify-between border-b border-slate-100 px-6 py-4">
+              <div>
+                <h3 className="text-lg font-bold text-navy">Candidate insights</h3>
+                <p className="text-sm text-navy/60">View details and let AI score their fit for this job.</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setCandidateModalOpen(false);
+                  setCandidateScore(null);
+                  setCandidateDetailError(null);
+                }}
+                className="rounded-full p-2 text-sm font-semibold text-navy/60 transition hover:bg-slate-100 hover:text-navy"
+                aria-label="Close"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="grid gap-4 p-6 lg:grid-cols-3">
+              <div className="space-y-3 lg:col-span-2">
+                {loadingCandidateDetail ? (
+                  <div className="space-y-3 animate-pulse">
+                    <div className="h-5 w-1/2 rounded bg-slate-100" />
+                    <div className="h-4 w-3/4 rounded bg-slate-100" />
+                    <div className="h-24 w-full rounded-xl bg-slate-100" />
+                  </div>
+                ) : activeCandidate ? (
+                  <div className="space-y-3">
+                    <div>
+                      <h4 className="text-xl font-bold text-navy">{activeCandidate.fullName || activeCandidate.name}</h4>
+                      <p className="text-sm text-navy/60">{activeCandidate.location || 'Location unavailable'}</p>
+                    </div>
+                    {activeCandidate.skills && activeCandidate.skills.length > 0 && (
+                      <div className="flex flex-wrap gap-2">
+                        {activeCandidate.skills.slice(0, 6).map((skill) => (
+                          <span
+                            key={skill}
+                            className="rounded-full bg-indigo-50 px-3 py-1 text-xs font-semibold text-indigo-700 ring-1 ring-indigo-100"
+                          >
+                            {skill}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                    {activeCandidate.summary && (
+                      <div className="rounded-xl bg-navy/5 px-4 py-3 text-sm text-navy/70 ring-1 ring-navy/5">
+                        {activeCandidate.summary}
+                      </div>
+                    )}
+                    <div>
+                      <p className="text-sm font-semibold text-navy">Resume preview</p>
+                      <div className="mt-2 max-h-60 overflow-y-auto rounded-xl border border-navy/10 bg-slate-50 px-3 py-3 text-sm text-navy/70">
+                        {activeCandidate.rawText?.slice(0, 1800) || 'No resume text available for scoring.'}
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <p className="text-sm text-rose-600">Unable to load candidate details.</p>
+                )}
+              </div>
+
+              <div className="space-y-4 rounded-2xl bg-slate-50 p-4 ring-1 ring-navy/5">
+                <div className="space-y-1">
+                  <p className="text-sm font-semibold text-navy">AI Match Score</p>
+                  <p className="text-xs text-navy/60">Compares this resume to the job description.</p>
+                </div>
+                {candidateScore ? (
+                  <div className="space-y-2 rounded-xl bg-white px-4 py-3 shadow-sm ring-1 ring-navy/5">
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm font-semibold text-navy">Match score</span>
+                      <span className="rounded-full bg-indigo-50 px-3 py-1 text-sm font-semibold text-indigo-700 ring-1 ring-indigo-100">
+                        {candidateScore.score}%
+                      </span>
+                    </div>
+                    {candidateScore.explanation && (
+                      <p className="text-sm text-navy/70">{candidateScore.explanation}</p>
+                    )}
+                  </div>
+                ) : (
+                  <div className="rounded-xl bg-white px-4 py-3 text-sm text-navy/60 ring-1 ring-navy/5">
+                    No score yet. Run AI to prioritize this candidate.
+                  </div>
+                )}
+
+                {candidateDetailError && (
+                  <div className="rounded-xl bg-rose-50 px-3 py-2 text-xs font-semibold text-rose-700 ring-1 ring-rose-100">
+                    {candidateDetailError}
+                  </div>
+                )}
+
+                <button
+                  type="button"
+                  onClick={() => void handleScoreCandidate()}
+                  disabled={scoring || loadingCandidateDetail || !activeCandidate}
+                  className="w-full rounded-xl bg-indigo-600 px-4 py-3 text-sm font-semibold text-white shadow-md shadow-indigo-200 transition enabled:hover:-translate-y-0.5 enabled:hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {scoring ? 'Scoring candidate...' : 'Score fit with AI'}
+                </button>
+              </div>
             </div>
           </div>
         </div>

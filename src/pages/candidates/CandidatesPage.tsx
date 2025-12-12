@@ -1,6 +1,7 @@
 import { type ChangeEvent, type DragEvent, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api, { type ApiError } from '../../api/client';
+import { type AxiosProgressEvent } from 'axios';
 
 export type Candidate = {
   id: string;
@@ -38,10 +39,11 @@ const CandidatesPage = () => {
   const [error, setError] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [modalOpen, setModalOpen] = useState(false);
-  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [uploadProgress, setUploadProgress] = useState<number | null>(null);
+  const [currentFileName, setCurrentFileName] = useState<string>('');
 
   useEffect(() => {
     void fetchCandidates();
@@ -82,15 +84,15 @@ const CandidatesPage = () => {
   };
 
   const handleFileChange = (event: ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    setSelectedFile(file || null);
+    const files = Array.from(event.target.files || []);
+    setSelectedFiles(files);
     setUploadError(null);
   };
 
   const handleDrop = (event: DragEvent<HTMLLabelElement>) => {
     event.preventDefault();
-    const file = event.dataTransfer.files?.[0];
-    setSelectedFile(file || null);
+    const files = Array.from(event.dataTransfer.files || []);
+    setSelectedFiles(files);
     setUploadError(null);
   };
 
@@ -99,36 +101,44 @@ const CandidatesPage = () => {
   };
 
   const handleUpload = async () => {
-    if (!selectedFile) {
-      setUploadError('Please choose a resume file to upload.');
+    if (selectedFiles.length === 0) {
+      setUploadError('Please choose at least one resume file to upload.');
       return;
     }
-
-    const formData = new FormData();
-    formData.append('resume', selectedFile);
 
     setUploading(true);
     setUploadError(null);
     setUploadProgress(0);
+    setCurrentFileName('');
 
     try {
-      await api.post<Candidate>('/candidates/upload', formData, {
-        headers: {
-          'Content-Type': 'multipart/form-data',
-        },
-        onUploadProgress: (progressEvent: ProgressEvent) => {
-          if (progressEvent.total) {
-            const percentCompleted = Math.round((progressEvent.loaded * 100) / progressEvent.total);
-            setUploadProgress(percentCompleted);
-          } else {
-            setUploadProgress(null);
-          }
-        },
-      });
+      for (const [index, file] of selectedFiles.entries()) {
+        setCurrentFileName(file.name);
+        const formData = new FormData();
+        formData.append('resume', file);
+
+        await api.post<Candidate>('/candidates/upload', formData, {
+          headers: {
+            'Content-Type': 'multipart/form-data',
+          },
+          onUploadProgress: (progressEvent: AxiosProgressEvent) => {
+            if (progressEvent.total) {
+              const percentCompleted = Math.round((progressEvent.loaded * 100) / progressEvent.total);
+              const totalFiles = selectedFiles.length;
+              const fileProgressPortion = percentCompleted / totalFiles;
+              const completedPortion = (index / totalFiles) * 100;
+              setUploadProgress(Math.min(100, Math.round(completedPortion + fileProgressPortion)));
+            } else {
+              setUploadProgress(null);
+            }
+          },
+        });
+      }
 
       setModalOpen(false);
-      setSelectedFile(null);
+      setSelectedFiles([]);
       setUploadProgress(null);
+      setCurrentFileName('');
       void fetchCandidates();
     } catch (uploadErr) {
       console.error(uploadErr);
@@ -348,11 +358,23 @@ const CandidatesPage = () => {
                 id="resume-upload"
                 name="resume"
                 type="file"
+                multiple
                 accept=".pdf,.doc,.docx"
                 onChange={handleFileChange}
                 className="hidden"
               />
-              {selectedFile && <p className="mt-3 rounded-full bg-white px-3 py-1 text-xs font-semibold text-indigo-700 shadow-sm">{selectedFile.name}</p>}
+              {selectedFiles.length > 0 && (
+                <div className="mt-3 flex flex-wrap justify-center gap-2">
+                  {selectedFiles.map((file) => (
+                    <span
+                      key={file.name}
+                      className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-indigo-700 shadow-sm"
+                    >
+                      {file.name}
+                    </span>
+                  ))}
+                </div>
+              )}
             </label>
 
             {uploadError && <div className="mt-3 rounded-lg bg-rose-50 px-3 py-2 text-sm text-rose-700">{uploadError}</div>}
@@ -362,7 +384,9 @@ const CandidatesPage = () => {
                 <div className="h-2 flex-1 overflow-hidden rounded-full bg-navy/10">
                   <div className="h-full rounded-full bg-indigo-500 transition-all" style={{ width: `${uploadProgress}%` }} />
                 </div>
-                <span className="text-xs font-semibold text-navy/70">{uploadProgress}%</span>
+                <span className="text-xs font-semibold text-navy/70">
+                  {uploadProgress}% {currentFileName ? `• ${currentFileName}` : ''}
+                </span>
               </div>
             )}
 

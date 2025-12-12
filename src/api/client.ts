@@ -1,4 +1,10 @@
-import axios, { type AxiosError, type AxiosRequestConfig, type AxiosResponse } from 'axios';
+import axios, {
+  type AxiosError,
+  type AxiosRequestConfig,
+  type AxiosRequestHeaders,
+  type AxiosResponse,
+  type InternalAxiosRequestConfig,
+} from 'axios';
 
 const baseUrl = import.meta.env.VITE_API_URL || '';
 
@@ -20,21 +26,17 @@ const apiClient = axios.create({
   baseURL: baseUrl,
 });
 
-apiClient.interceptors.request.use((config: AxiosRequestConfig) => {
+apiClient.interceptors.request.use((config: InternalAxiosRequestConfig) => {
   const token = localStorage.getItem('hf_token');
 
   if (token) {
-    config.headers = {
-      ...(config.headers || {}),
-      Authorization: `Bearer ${token}`,
-    };
+    config.headers = (config.headers || {}) as AxiosRequestHeaders;
+    config.headers.Authorization = `Bearer ${token}`;
   }
 
   if (!(config.data instanceof FormData)) {
-    config.headers = {
-      'Content-Type': 'application/json',
-      ...(config.headers || {}),
-    };
+    config.headers = (config.headers || {}) as AxiosRequestHeaders;
+    config.headers['Content-Type'] = 'application/json';
   }
 
   return config;
