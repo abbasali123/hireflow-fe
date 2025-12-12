@@ -1,4 +1,4 @@
-import { FormEvent, useState } from 'react';
+import { FormEvent, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../../api/client';
 
@@ -18,6 +18,28 @@ const JobCreatePage = () => {
   const [aiPrompt, setAiPrompt] = useState('');
   const [aiGeneratedText, setAiGeneratedText] = useState('');
   const [aiGenerating, setAiGenerating] = useState(false);
+  const [importModalOpen, setImportModalOpen] = useState(false);
+  const [importing, setImporting] = useState(false);
+  const [importError, setImportError] = useState<string | null>(null);
+
+  const templateContent = useMemo(
+    () =>
+      [
+        'HireFlow Job Import Template',
+        'Fill in the details after each label and upload the file back to HireFlow.',
+        '',
+        'Title: ',
+        'Company: ',
+        'Location: ',
+        'Seniority: ',
+        'Salary Min: ',
+        'Salary Max: ',
+        'Required Skills: (comma separated)',
+        'Description:',
+        'Paste the job description here. You can keep multiple lines.',
+      ].join('\n'),
+    [],
+  );
 
   const handleSubmit = async (event: FormEvent) => {
     event.preventDefault();
@@ -70,21 +92,86 @@ const JobCreatePage = () => {
     setAiModalOpen(false);
   };
 
+  const downloadTemplate = () => {
+    const blob = new Blob([templateContent], { type: 'application/msword' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = 'hireflow-job-template.doc';
+    link.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const parseJobDoc = (content: string) => {
+    const extractField = (label: string) => {
+      const match = new RegExp(`${label}:\\s*(.*)`, 'i').exec(content);
+      return match?.[1]?.trim() || '';
+    };
+
+    const parsedTitle = extractField('Title');
+    const parsedCompany = extractField('Company');
+    const parsedLocation = extractField('Location');
+    const parsedSeniority = extractField('Seniority');
+    const parsedSalaryMin = extractField('Salary Min');
+    const parsedSalaryMax = extractField('Salary Max');
+    const skillsLine = extractField('Required Skills');
+
+    const descriptionMatch = /Description:\s*([\s\S]*)/i.exec(content);
+    const parsedDescription = descriptionMatch?.[1]?.trim() || '';
+
+    setTitle((previous) => parsedTitle || previous);
+    setCompany((previous) => parsedCompany || previous);
+    setLocation((previous) => parsedLocation || previous);
+    setSeniority((previous) => parsedSeniority || previous);
+    setSalaryMin((previous) => parsedSalaryMin || previous);
+    setSalaryMax((previous) => parsedSalaryMax || previous);
+    setRequiredSkills((previous) => skillsLine || previous);
+    setDescription((previous) => parsedDescription || previous);
+  };
+
+  const handleJobDocUpload = async (file: File) => {
+    setImporting(true);
+    setImportError(null);
+
+    try {
+      const content = await file.text();
+      parseJobDoc(content);
+      setImportModalOpen(false);
+    } catch (uploadError) {
+      console.error(uploadError);
+      setImportError('Unable to read that file. Please try again with the template.');
+    } finally {
+      setImporting(false);
+    }
+  };
+
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
         <div>
           <p className="text-sm uppercase tracking-wide text-navy/50">Create</p>
           <h1 className="font-display text-3xl font-bold text-navy">New Job</h1>
           <p className="mt-1 text-sm text-navy/60">Define the essentials for this role to keep hiring aligned.</p>
         </div>
-        <button
-          type="button"
-          onClick={() => navigate(-1)}
-          className="rounded-xl border border-navy/10 bg-white px-4 py-2 text-sm font-semibold text-navy shadow-sm transition hover:-translate-y-0.5 hover:border-indigo-200 hover:text-indigo-600"
-        >
-          Back
-        </button>
+        <div className="flex flex-wrap items-center gap-3">
+          <button
+            type="button"
+            onClick={() => {
+              setImportError(null);
+              setImportModalOpen(true);
+            }}
+            className="inline-flex items-center gap-2 rounded-xl border border-indigo-200 bg-indigo-50 px-4 py-2 text-sm font-semibold text-indigo-700 shadow-sm transition hover:-translate-y-0.5 hover:bg-white"
+          >
+            📄 Import from Job File
+          </button>
+          <button
+            type="button"
+            onClick={() => navigate(-1)}
+            className="rounded-xl border border-navy/10 bg-white px-4 py-2 text-sm font-semibold text-navy shadow-sm transition hover:-translate-y-0.5 hover:border-indigo-200 hover:text-indigo-600"
+          >
+            Back
+          </button>
+        </div>
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-5 rounded-2xl bg-white p-6 shadow-sm ring-1 ring-navy/5">
@@ -295,6 +382,65 @@ const JobCreatePage = () => {
                   </button>
                 </div>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {importModalOpen && (
+        <div className="fixed inset-0 z-30 flex items-center justify-center bg-navy/60 px-4">
+          <div className="w-full max-w-xl rounded-2xl bg-white shadow-2xl ring-1 ring-black/5">
+            <div className="flex items-start justify-between border-b border-slate-100 px-6 py-4">
+              <div>
+                <h3 className="text-lg font-bold text-navy">Import job from a doc file</h3>
+                <p className="text-sm text-navy/60">Download the template, fill it out, and upload to pre-fill this form.</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => (!importing ? setImportModalOpen(false) : null)}
+                className="rounded-full p-2 text-sm font-semibold text-navy/60 transition hover:bg-slate-100 hover:text-navy"
+                aria-label="Close"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="space-y-4 p-6">
+              <div className="rounded-xl bg-indigo-50 px-4 py-3 text-sm text-navy/80 ring-1 ring-indigo-100">
+                Start with the template so our parser can map details to the right fields.
+              </div>
+
+              <div className="flex flex-wrap items-center gap-3">
+                <button
+                  type="button"
+                  onClick={downloadTemplate}
+                  className="inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-4 py-2 text-sm font-semibold text-white shadow-lg shadow-indigo-200 transition hover:-translate-y-0.5 hover:bg-indigo-500"
+                >
+                  ↓ Download template
+                </button>
+                <label
+                  className="inline-flex cursor-pointer items-center gap-2 rounded-xl border border-navy/10 bg-white px-4 py-2 text-sm font-semibold text-navy shadow-sm transition hover:-translate-y-0.5 hover:border-indigo-200 hover:text-indigo-700"
+                >
+                  {importing ? 'Reading file…' : 'Upload completed doc'}
+                  <input
+                    type="file"
+                    accept=".doc,.docx,.txt,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                    className="hidden"
+                    onChange={(event) => {
+                      const file = event.target.files?.[0];
+                      if (file) void handleJobDocUpload(file);
+                    }}
+                  />
+                </label>
+              </div>
+
+              <p className="text-xs text-navy/50">
+                We fill in any fields you leave blank with your current entries so you can review everything before creating the job.
+              </p>
+
+              {importError ? (
+                <div className="rounded-xl bg-rose-50 px-3 py-2 text-sm text-rose-700 ring-1 ring-rose-100">{importError}</div>
+              ) : null}
             </div>
           </div>
         </div>
