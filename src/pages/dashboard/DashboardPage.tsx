@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import api from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
 
@@ -10,11 +11,13 @@ type Job = {
   status?: string;
   createdAt: string;
   candidateCount?: number;
+  candidates?: unknown[];
 };
 
 type Candidate = {
   id?: string;
   name?: string;
+  fullName?: string;
   role?: string;
   status?: string;
   createdAt: string;
@@ -24,6 +27,7 @@ type Candidate = {
 
 const DashboardPage = () => {
   const { user } = useAuth();
+  const navigate = useNavigate();
   const [jobs, setJobs] = useState<Job[]>([]);
   const [candidates, setCandidates] = useState<Candidate[]>([]);
   const [loading, setLoading] = useState(true);
@@ -237,12 +241,22 @@ const DashboardPage = () => {
                   Math.floor((Date.now() - createdDate.getTime()) / (1000 * 60 * 60 * 24)),
                   0,
                 );
-                const candidateCount = job.candidateCount ?? '-';
+                const candidateCount =
+                  job.candidateCount ?? (Array.isArray(job.candidates) ? job.candidates.length : 0);
 
                 return (
                   <div
                     key={job.id || `${job.title}-${job.createdAt}`}
-                    className="flex flex-col gap-2 rounded-lg bg-white/80 px-4 py-3 shadow-sm ring-1 ring-white/80"
+                    className="flex flex-col gap-2 rounded-lg bg-white/80 px-4 py-3 shadow-sm ring-1 ring-white/80 transition hover:-translate-y-0.5 hover:shadow-md"
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => (job.id ? navigate(`/app/jobs/${job.id}`) : navigate('/app/jobs'))}
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter' || event.key === ' ') {
+                        event.preventDefault();
+                        job.id ? navigate(`/app/jobs/${job.id}`) : navigate('/app/jobs');
+                      }
+                    }}
                   >
                     <div className="flex items-center justify-between gap-3">
                       <div>
@@ -290,10 +304,23 @@ const DashboardPage = () => {
               topCandidates.map((candidate) => (
                 <div
                   key={candidate.id || `${candidate.name}-${candidate.createdAt}`}
-                  className="flex items-center justify-between gap-3 rounded-lg bg-white/80 px-4 py-3 shadow-sm ring-1 ring-white/80"
+                  className="flex items-center justify-between gap-3 rounded-lg bg-white/80 px-4 py-3 shadow-sm ring-1 ring-white/80 transition hover:-translate-y-0.5 hover:shadow-md"
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => (candidate.id ? navigate(`/app/candidates/${candidate.id}`) : navigate('/app/candidates'))}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter' || event.key === ' ') {
+                      event.preventDefault();
+                      candidate.id
+                        ? navigate(`/app/candidates/${candidate.id}`)
+                        : navigate('/app/candidates');
+                    }
+                  }}
                 >
                   <div>
-                    <p className="text-sm font-semibold text-navy">{candidate.name || 'Candidate'}</p>
+                    <p className="text-sm font-semibold text-navy">
+                      {candidate.name || candidate.fullName || 'Candidate'}
+                    </p>
                     <p className="text-xs text-navy/60">
                       {[candidate.role, candidate.location].filter(Boolean).join(' • ') || 'Role TBD'}
                     </p>
