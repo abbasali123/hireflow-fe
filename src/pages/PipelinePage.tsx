@@ -22,11 +22,35 @@ type PipelineStatus = (typeof pipelineColumns)[number]['key'];
 
 type Candidate = {
   id: string;
-  name: string;
-  title?: string;
+  userId: string;
+  fullName: string;
+  email: string;
+  phone?: string;
+  location?: string;
+  resumeUrl?: string;
+  summary?: string | null;
+  rawText?: string | null;
   skills?: string[];
-  matchScore?: number;
-  status?: PipelineStatus;
+  experience?: { title?: string; years?: number; company?: string }[];
+  education?: { degree?: string; school?: string; graduationYear?: number }[];
+  createdAt?: string;
+};
+
+type JobCandidate = {
+  id: string;
+  jobId: string;
+  candidateId: string;
+  status: PipelineStatus;
+  matchScore?: number | null;
+  notes?: string | null;
+  candidate: Candidate;
+};
+
+type PipelineCandidate = Candidate & {
+  jobCandidateId: string;
+  status: PipelineStatus;
+  matchScore?: number | null;
+  notes?: string | null;
 };
 
 type Job = {
@@ -35,14 +59,10 @@ type Job = {
   company?: string;
 };
 
-type JobDetail = Job & {
-  candidates?: Candidate[];
-};
-
 const PipelinePage = () => {
   const [jobs, setJobs] = useState<Job[]>([]);
   const [selectedJobId, setSelectedJobId] = useState('');
-  const [board, setBoard] = useState<Record<PipelineStatus, Candidate[]>>({
+  const [board, setBoard] = useState<Record<PipelineStatus, PipelineCandidate[]>>({
     SOURCED: [],
     CONTACTED: [],
     INTERVIEWING: [],
@@ -84,10 +104,13 @@ const PipelinePage = () => {
       setError(null);
 
       try {
-        const response = await api.get<JobDetail>(`/jobs/${selectedJobId}`);
-        const candidates = (response.data?.candidates || []).map((candidate) => ({
-          ...candidate,
-          status: (candidate.status || 'SOURCED') as PipelineStatus,
+        const response = await api.get<JobCandidate[]>(`/jobs/${selectedJobId}/candidates`);
+        const candidates = (response.data || []).map((jobCandidate) => ({
+          ...jobCandidate.candidate,
+          jobCandidateId: jobCandidate.id,
+          status: (jobCandidate.status || 'SOURCED') as PipelineStatus,
+          matchScore: jobCandidate.matchScore,
+          notes: jobCandidate.notes,
         }));
 
         setBoard({
@@ -145,7 +168,7 @@ const PipelinePage = () => {
     }
   };
 
-  const renderCandidateCard = (candidate: Candidate, accent: string) => (
+  const renderCandidateCard = (candidate: PipelineCandidate, accent: string) => (
     <div
       key={candidate.id}
       className="group relative overflow-hidden rounded-xl bg-white p-4 shadow-sm ring-1 ring-navy/5 transition hover:-translate-y-0.5 hover:shadow-md"
@@ -153,8 +176,10 @@ const PipelinePage = () => {
       <span className={`absolute left-0 top-0 h-full w-1 ${accent}`} aria-hidden />
       <div className="flex items-start justify-between gap-3">
         <div>
-          <p className="text-sm font-semibold text-navy">{candidate.name}</p>
-          <p className="text-xs text-navy/60">{candidate.title || candidate.skills?.slice(0, 3).join(', ') || 'Skills unavailable'}</p>
+          <p className="text-sm font-semibold text-navy">{candidate.fullName}</p>
+          <p className="text-xs text-navy/60">
+            {candidate.experience?.[0]?.title || candidate.skills?.slice(0, 3).join(', ') || candidate.location || 'Details unavailable'}
+          </p>
         </div>
         {typeof candidate.matchScore === 'number' && (
           <span className="rounded-full bg-indigo-50 px-2 py-1 text-[11px] font-semibold text-indigo-600 ring-1 ring-indigo-100">
